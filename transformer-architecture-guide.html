@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Transformer, Traced — an end-to-end guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0A0F1C;
+  --panel:#111A2C;
+  --panel-2:#0D1524;
+  --steel:#28334A;
+  --steel-soft:#1B2438;
+  --text:#E8ECF6;
+  --muted:#8B96AC;
+  --muted-2:#5C6883;
+  --cyan:#4FD8C4;
+  --amber:#F2A65A;
+  --violet:#A78BFA;
+  --rose:#F0678C;
+  --grid-line: rgba(255,255,255,0.045);
+  --radius: 10px;
+  --maxw: 1180px;
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  margin:0;
+  background:
+    radial-gradient(1200px 600px at 85% -10%, rgba(79,216,196,0.08), transparent 60%),
+    radial-gradient(900px 500px at -10% 20%, rgba(167,139,250,0.07), transparent 55%),
+    var(--ink);
+  color:var(--text);
+  font-family:'Inter',sans-serif;
+  line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{font-family:'Space Grotesk',sans-serif; margin:0; letter-spacing:-0.01em;}
+code, .mono, .matrix-cell, .token-chip, .num{font-family:'JetBrains Mono',monospace;}
+a{color:var(--cyan);}
+p{color:var(--muted); max-width:64ch;}
+::selection{background:rgba(79,216,196,0.3);}
+
+/* ---------- layout shell ---------- */
+.shell{display:flex; max-width:1440px; margin:0 auto;}
+nav.rail{
+  position:sticky; top:0; height:100vh; width:236px; flex:none;
+  padding:28px 14px 28px 28px; border-right:1px solid var(--grid-line);
+  overflow-y:auto;
+}
+nav.rail::-webkit-scrollbar{width:6px;}
+nav.rail::-webkit-scrollbar-thumb{background:var(--steel); border-radius:3px;}
+.brand{display:flex; align-items:center; gap:10px; margin-bottom:34px;}
+.brand-mark{width:26px;height:26px;border-radius:6px;
+  background:linear-gradient(135deg,var(--cyan),var(--violet));
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Space Grotesk';font-weight:700;font-size:13px;color:#0A0F1C;}
+.brand-name{font-family:'Space Grotesk';font-weight:600;font-size:14.5px;color:var(--text);}
+.brand-name span{display:block;font-family:'Inter';font-weight:400;font-size:11px;color:var(--muted-2);margin-top:1px;}
+ul.toc{list-style:none;margin:0;padding:0;}
+ul.toc li{margin:0;}
+ul.toc a{
+  display:flex; gap:10px; align-items:baseline;
+  text-decoration:none; color:var(--muted); font-size:13px;
+  padding:7px 10px; border-radius:7px; border-left:2px solid transparent;
+  transition:all .15s ease;
+}
+ul.toc a .n{font-size:10.5px; color:var(--muted-2); min-width:16px;}
+ul.toc a:hover{color:var(--text); background:var(--steel-soft);}
+ul.toc a.active{color:var(--cyan); border-left-color:var(--cyan); background:rgba(79,216,196,0.06);}
+ul.toc a.active .n{color:var(--cyan);}
+
+main{flex:1; min-width:0;}
+.wrap{max-width:var(--maxw); margin:0 auto; padding:0 56px;}
+section{padding:96px 0; border-bottom:1px solid var(--grid-line); scroll-margin-top:20px;}
+section:last-of-type{border-bottom:none;}
+.eyebrow{
+  display:inline-flex; align-items:center; gap:8px;
+  font-family:'JetBrains Mono'; font-size:11.5px; letter-spacing:0.08em; text-transform:uppercase;
+  color:var(--cyan); margin-bottom:14px;
+}
+.eyebrow::before{content:''; width:16px; height:1px; background:var(--cyan);}
+h2.title{font-size:34px; font-weight:600; margin-bottom:14px; max-width:20ch;}
+.lede{font-size:16.5px; color:var(--muted); max-width:62ch; margin-bottom:36px;}
+.reveal{opacity:0; transform:translateY(18px); transition:opacity .7s ease, transform .7s ease;}
+.reveal.in{opacity:1; transform:translateY(0);}
+
+/* ---------- hero ---------- */
+.hero{padding:88px 0 70px; border-bottom:1px solid var(--grid-line); position:relative;}
+.hero-kicker{font-family:'JetBrains Mono'; font-size:12px; color:var(--muted-2); letter-spacing:.08em; text-transform:uppercase; margin-bottom:20px;}
+.hero h1{font-size:56px; line-height:1.04; font-weight:700; max-width:14ch; margin-bottom:22px;}
+.hero h1 em{font-style:normal; background:linear-gradient(90deg,var(--cyan),var(--violet)); -webkit-background-clip:text; background-clip:text; color:transparent;}
+.hero p.sub{font-size:17px; color:var(--muted); max-width:56ch; margin-bottom:36px;}
+.hero-actions{display:flex; gap:12px; margin-bottom:56px;}
+.btn{
+  font-family:'Space Grotesk'; font-weight:600; font-size:13.5px;
+  padding:11px 20px; border-radius:8px; text-decoration:none; cursor:pointer;
+  border:1px solid var(--steel); color:var(--text); background:var(--panel);
+  transition:all .15s ease; display:inline-block;
+}
+.btn.primary{background:linear-gradient(135deg,var(--cyan),#3fc4b0); color:#06110F; border:none;}
+.btn:hover{transform:translateY(-1px); border-color:var(--cyan);}
+.btn.primary:hover{filter:brightness(1.08);}
+
+/* hero flow banner */
+.flowband{
+  border:1px solid var(--steel); border-radius:14px; background:var(--panel-2);
+  padding:26px 22px 20px; overflow:hidden; position:relative;
+}
+.flowband .caption{font-size:11px; color:var(--muted-2); font-family:'JetBrains Mono'; margin-bottom:16px; letter-spacing:.04em;}
+#heroCanvas{width:100%; height:170px; display:block;}
+
+/* ---------- generic cards / panels ---------- */
+.panel{
+  background:var(--panel); border:1px solid var(--steel); border-radius:var(--radius);
+  padding:24px;
+}
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:22px;}
+.grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:16px;}
+@media (max-width:900px){.grid2{grid-template-columns:1fr;} .grid3{grid-template-columns:1fr;}}
+
+.pill{display:inline-block; font-family:'JetBrains Mono'; font-size:11px; padding:3px 9px; border-radius:20px; border:1px solid var(--steel); color:var(--muted);}
+
+/* ---------- token chips ---------- */
+.token-row{display:flex; flex-wrap:wrap; gap:8px; margin:18px 0;}
+.token-chip{
+  padding:7px 12px; background:var(--steel-soft); border:1px solid var(--steel);
+  border-radius:6px; font-size:13px; color:var(--text); position:relative;
+  transition:all .2s ease; cursor:default;
+}
+.token-chip .id{display:block; font-size:9.5px; color:var(--muted-2); margin-top:2px;}
+.token-chip:hover{border-color:var(--cyan); background:rgba(79,216,196,0.08); transform:translateY(-2px);}
+
+#tokenizeInput{
+  width:100%; background:var(--panel-2); border:1px solid var(--steel); color:var(--text);
+  font-family:'JetBrains Mono'; font-size:14px; padding:12px 14px; border-radius:8px; margin-bottom:4px;
+  outline:none;
+}
+#tokenizeInput:focus{border-color:var(--cyan);}
+
+/* ---------- vector bars ---------- */
+.vec{display:flex; align-items:flex-end; gap:3px; height:60px;}
+.vec .bar{flex:1; background:var(--cyan); border-radius:2px 2px 0 0; min-height:2px; transition:height .4s ease;}
+.vec-row{display:flex; align-items:center; gap:14px; margin:10px 0;}
+.vec-label{font-family:'JetBrains Mono'; font-size:11.5px; color:var(--muted); width:64px; flex:none;}
+
+/* ---------- matrices ---------- */
+.matrix{display:inline-grid; gap:3px; padding:10px; background:var(--panel-2); border:1px solid var(--steel); border-radius:8px;}
+.matrix-cell{
+  width:42px; height:32px; display:flex; align-items:center; justify-content:center;
+  font-size:11px; border-radius:4px; color:#0A0F1C; font-weight:600;
+  transition:transform .25s ease, box-shadow .25s ease;
+}
+.matrix-cell.dim{width:34px;height:26px;font-size:10px;}
+.matrix-wrap{display:flex; flex-direction:column; align-items:center; gap:8px;}
+.matrix-name{font-family:'JetBrains Mono'; font-size:11px; color:var(--muted); letter-spacing:.04em;}
+
+/* ---------- attention playground ---------- */
+.loom{
+  background:var(--panel-2); border:1px solid var(--steel); border-radius:14px; padding:28px;
+}
+.loom-tokens{display:flex; justify-content:space-between; margin-bottom:6px; position:relative;}
+.loom-token{
+  font-family:'JetBrains Mono'; font-size:13px; padding:8px 12px; border-radius:7px;
+  background:var(--steel-soft); border:1px solid var(--steel); cursor:pointer; user-select:none;
+  transition:all .15s ease; position:relative; z-index:2;
+}
+.loom-token.active{border-color:var(--amber); background:rgba(242,166,90,0.12); color:var(--amber);}
+#loomSvg{width:100%; height:120px; display:block; margin:6px 0;}
+.loom-controls{display:flex; align-items:center; gap:14px; margin-top:18px; flex-wrap:wrap;}
+.loom-controls .hint{font-size:12.5px; color:var(--muted-2);}
+.legend{display:flex; gap:18px; flex-wrap:wrap; margin-top:14px;}
+.legend-item{display:flex; align-items:center; gap:7px; font-size:12px; color:var(--muted);}
+.legend-dot{width:9px;height:9px;border-radius:3px;}
+
+.step-badges{display:flex; gap:10px; flex-wrap:wrap; margin-bottom:22px;}
+.step-badge{
+  font-family:'JetBrains Mono'; font-size:11.5px; padding:6px 12px; border-radius:20px;
+  border:1px solid var(--steel); color:var(--muted-2); cursor:pointer; transition:all .15s ease;
+}
+.step-badge.on{color:var(--ink); background:var(--cyan); border-color:var(--cyan); font-weight:600;}
+
+/* softmax bars */
+.softmax-row{display:flex; align-items:flex-end; gap:8px; height:90px; margin:14px 0;}
+.softmax-bar-wrap{flex:1; display:flex; flex-direction:column; align-items:center; gap:6px;}
+.softmax-bar{width:100%; background:linear-gradient(180deg,var(--amber),#c97f3a); border-radius:3px 3px 0 0; transition:height .5s cubic-bezier(.2,.8,.2,1);}
+.softmax-lbl{font-size:10px; color:var(--muted-2); font-family:'JetBrains Mono';}
+.softmax-val{font-size:10.5px; color:var(--amber); font-family:'JetBrains Mono';}
+
+/* ---------- pipeline diagram ---------- */
+.pipeline{display:flex; flex-direction:column; gap:10px;}
+.pipe-stage{
+  display:flex; align-items:center; gap:16px; padding:14px 18px;
+  background:var(--panel); border:1px solid var(--steel); border-radius:10px;
+  transition:all .2s ease; cursor:default;
+}
+.pipe-stage:hover{border-color:var(--cyan); transform:translateX(4px);}
+.pipe-num{font-family:'JetBrains Mono'; font-size:11px; color:var(--cyan); width:26px; flex:none;}
+.pipe-body strong{display:block; font-size:14.5px; color:var(--text); margin-bottom:2px; font-family:'Space Grotesk'; font-weight:600;}
+.pipe-body span{font-size:12.5px; color:var(--muted-2);}
+.pipe-arrow{text-align:center; color:var(--steel); font-size:14px;}
+
+/* ---------- stack diagram (encoder/decoder) ---------- */
+.stackzone{display:flex; gap:40px; justify-content:center; flex-wrap:wrap; padding:20px 0;}
+.stackcol{display:flex; flex-direction:column-reverse; gap:8px; align-items:center;}
+.stack-layer{
+  width:190px; padding:10px 14px; border-radius:8px; text-align:center;
+  font-size:12px; font-family:'JetBrains Mono'; border:1px solid var(--steel);
+  background:var(--panel); color:var(--muted);
+}
+.stack-layer.attn{border-color:rgba(79,216,196,.5); color:var(--cyan);}
+.stack-layer.cross{border-color:rgba(240,103,140,.5); color:var(--rose);}
+.stack-layer.ffn{border-color:rgba(167,139,250,.5); color:var(--violet);}
+.stack-layer.mask{border-color:rgba(242,166,90,.5); color:var(--amber);}
+.stack-label{font-family:'JetBrains Mono'; font-size:11px; color:var(--muted-2); margin-bottom:10px; text-transform:uppercase; letter-spacing:.05em;}
+.nx{font-size:11px; color:var(--muted-2); margin-top:6px; font-family:'JetBrains Mono';}
+
+/* ---------- positional encoding canvas ---------- */
+canvas{max-width:100%;}
+.pe-canvas-wrap{background:var(--panel-2); border:1px solid var(--steel); border-radius:10px; padding:14px;}
+
+/* ---------- mask triangle ---------- */
+.mask-grid{display:inline-grid; gap:2px;}
+
+/* ---------- resource cards ---------- */
+.res-card{
+  padding:20px; background:var(--panel); border:1px solid var(--steel); border-radius:10px;
+  transition:all .2s ease; display:block; text-decoration:none;
+}
+.res-card:hover{border-color:var(--cyan); transform:translateY(-2px);}
+.res-card .kicker{font-family:'JetBrains Mono'; font-size:10.5px; color:var(--muted-2); text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px;}
+.res-card h4{font-size:15px; color:var(--text); margin-bottom:6px;}
+.res-card p{font-size:12.5px; margin:0; color:var(--muted-2);}
+
+/* ---------- footer ---------- */
+footer{padding:50px 0; text-align:center;}
+footer p{margin:0 auto; font-size:12.5px; color:var(--muted-2);}
+
+/* ---------- misc ---------- */
+.formula{
+  font-family:'JetBrains Mono'; background:var(--panel-2); border:1px solid var(--steel);
+  border-radius:8px; padding:16px 20px; font-size:14px; color:var(--cyan); overflow-x:auto;
+}
+.note{
+  border-left:2px solid var(--amber); padding:10px 16px; background:rgba(242,166,90,0.06);
+  border-radius:0 6px 6px 0; font-size:13px; color:var(--muted); margin-top:16px;
+}
+.two-col-text{display:grid; grid-template-columns:1fr 1fr; gap:40px;}
+@media (max-width:900px){.two-col-text{grid-template-columns:1fr;} .wrap{padding:0 22px;} nav.rail{display:none;} .hero h1{font-size:38px;}}
+
+.mini-toggle{display:flex; gap:8px; margin-bottom:16px;}
+.mini-toggle button{
+  font-family:'JetBrains Mono'; font-size:11.5px; padding:6px 12px; border-radius:6px;
+  border:1px solid var(--steel); background:var(--panel-2); color:var(--muted); cursor:pointer;
+}
+.mini-toggle button.on{background:var(--violet); color:#0A0F1C; border-color:var(--violet); font-weight:600;}
+
+.headgrid{display:grid; grid-template-columns:repeat(4,1fr); gap:14px;}
+@media (max-width:900px){.headgrid{grid-template-columns:repeat(2,1fr);}}
+.headcard{background:var(--panel-2); border:1px solid var(--steel); border-radius:8px; padding:12px; text-align:center;}
+.headcard .hlabel{font-family:'JetBrains Mono'; font-size:10.5px; color:var(--muted-2); margin-bottom:8px;}
+</style>
+</head>
+<body>
+
+<div class="shell">
+<nav class="rail">
+  <div class="brand">
+    <div class="brand-mark">T</div>
+    <div class="brand-name">Transformer, Traced<span>an end-to-end guide</span></div>
+  </div>
+  <ul class="toc" id="toc">
+    <li><a href="#tokenization"><span class="n">01</span>Tokenization</a></li>
+    <li><a href="#embeddings"><span class="n">02</span>Embeddings</a></li>
+    <li><a href="#positional"><span class="n">03</span>Positional Encoding</a></li>
+    <li><a href="#attention"><span class="n">04</span>Self-Attention</a></li>
+    <li><a href="#multihead"><span class="n">05</span>Multi-Head Attention</a></li>
+    <li><a href="#addnorm"><span class="n">06</span>Residuals &amp; LayerNorm</a></li>
+    <li><a href="#ffn"><span class="n">07</span>Feed-Forward Network</a></li>
+    <li><a href="#stack"><span class="n">08</span>The Full Stack</a></li>
+    <li><a href="#masking"><span class="n">09</span>Masking &amp; Cross-Attention</a></li>
+    <li><a href="#output"><span class="n">10</span>Output &amp; Decoding</a></li>
+    <li><a href="#training"><span class="n">11</span>Training vs Inference</a></li>
+    <li><a href="#resources"><span class="n">12</span>Further Reading</a></li>
+  </ul>
+</nav>
+
+<main>
+
+<!-- ================= HERO ================= -->
+<section class="hero">
+  <div class="wrap">
+    <div class="hero-kicker">// architecture deep-dive · self-contained · interactive</div>
+    <h1>Every matrix a token becomes, <em>traced end to end.</em></h1>
+    <p class="sub">The transformer turns words into vectors, vectors into attention, and attention into meaning — one matrix multiplication at a time. This guide walks the full pipeline: tokenizer to logits, with live, computed animations at every stage.</p>
+    <div class="hero-actions">
+      <a href="#tokenization" class="btn primary">Start at token 0 →</a>
+      <a href="#attention" class="btn">Jump to self-attention</a>
+    </div>
+    <div class="flowband">
+      <div class="caption">live &nbsp;·&nbsp; input stream → embedding → attention → logits</div>
+      <canvas id="heroCanvas"></canvas>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 01 TOKENIZATION ================= -->
+<section id="tokenization">
+  <div class="wrap reveal">
+    <div class="eyebrow">Stage 01</div>
+    <h2 class="title">Tokenization: text stops being text</h2>
+    <p class="lede">A transformer never sees words. It sees integers, chosen from a fixed vocabulary of 30,000–100,000+ subword pieces learned by an algorithm like Byte-Pair Encoding (BPE) or SentencePiece. Common words stay whole; rare ones get split into familiar fragments — which is how the model handles words it has never seen.</p>
+
+    <div class="panel">
+      <input id="tokenizeInput" type="text" value="Transformers process sequences unbelievably well" spellcheck="false">
+      <div class="token-row" id="tokenOutput"></div>
+      <p style="font-size:12px; color:var(--muted-2); margin-top:14px;">Edit the sentence above — notice how longer or unusual words (like "unbelievably") split into multiple pieces, while common short words stay intact as single tokens. This is a simplified illustrative splitter, not a production BPE table, but it mimics the real behavior.</p>
+    </div>
+
+    <div class="note">Each token chip above maps to one row in a giant lookup table — the embedding matrix — which is where Stage 02 begins.</div>
+  </div>
+</section>
+
+<!-- ================= 02 EMBEDDINGS ================= -->
+<section id="embeddings">
+  <div class="wrap reveal">
+    <div class="eyebrow">Stage 02</div>
+    <h2 class="title">Embeddings: an integer becomes a point in space</h2>
+    <p class="lede">Every token ID indexes into a learned embedding matrix of shape <span class="pill">vocab_size × d_model</span>. The row it retrieves is a dense vector — typically 512 to 12,288 numbers — that encodes learned meaning. Similar words land near each other in this high-dimensional space.</p>
+
+    <div class="grid2">
+      <div class="panel">
+        <div class="matrix-name" style="margin-bottom:14px;">Toy embedding vectors (d = 12, real dims are 100s–1000s)</div>
+        <div id="embedVecs"></div>
+      </div>
+      <div class="panel">
+        <div class="matrix-name" style="margin-bottom:10px;">What the vector encodes</div>
+        <p style="font-size:13.5px;">No single dimension has a clean human label, but directions in this space correspond to learned regularities — famously, <code>king − man + woman ≈ queen</code>. The model discovers this geometry entirely from data; nobody hand-designs it.</p>
+        <p style="font-size:13.5px;">Dimensionality is a budget: more dimensions can encode more distinctions, at the cost of more compute and parameters. GPT-3's largest variant used d_model = 12,288.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 03 POSITIONAL ENCODING ================= -->
+<section id="positional">
+  <div class="wrap reveal">
+    <div class="eyebrow">Stage 03</div>
+    <h2 class="title">Positional encoding: giving order to a bag of vectors</h2>
+    <p class="lede">Self-attention on its own is order-blind — it treats a sequence like a set. The original "Attention Is All You Need" architecture fixes this by adding a deterministic wave pattern to each embedding, so position 0 and position 50 get distinguishably different signatures.</p>
+
+    <div class="formula">PE(pos, 2i)&nbsp;&nbsp;= sin( pos / 10000^(2i/d_model) )<br>PE(pos, 2i+1) = cos( pos / 10000^(2i/d_model) )</div>
+
+    <div class="grid2" style="margin-top:24px;">
+      <div class="pe-canvas-wrap">
+        <div class="matrix-name" style="margin-bottom:8px;">Sine/cosine waves across positions, by dimension</div>
+        <canvas id="peCanvas" height="200"></canvas>
+      </div>
+      <div class="pe-canvas-wrap">
+        <div class="matrix-name" style="margin-bottom:8px;">The resulting encoding matrix (position × dimension)</div>
+        <canvas id="peHeatmap" height="200"></canvas>
+      </div>
+    </div>
+    <p style="margin-top:16px; font-size:13px;">Low dimensions oscillate fast (fine-grained position), high dimensions oscillate slow (coarse position) — together they act like a binary clock made of waves. Modern models (GPT-NeoX, LLaMA, Qwen) mostly use <strong style="color:var(--text)">Rotary Positional Embeddings (RoPE)</strong> instead, which rotates Q/K vectors by an angle proportional to position rather than adding a fixed vector — better extrapolation to longer sequences.</p>
+  </div>
+</section>
+
+<!-- ================= 04 SELF ATTENTION ================= -->
+<section id="attention">
+  <div class="wrap reveal">
+    <div class="eyebrow">Stage 04 · the core mechanism</div>
+    <h2 class="title">Self-attention: every token asks, every token answers</h2>
+    <p class="lede">Each token's embedding is projected through three learned weight matrices into a <strong style="color:var(--text)">Query</strong>, a <strong style="color:var(--cyan)">Key</strong>, and a <strong style="color:var(--violet)">Value</strong> vector. A token's Query is compared against every other token's Key to produce attention scores — how much that token should "listen to" every other token.</p>
+
+    <div class="formula">Attention(Q, K, V) = softmax( QK<sup>T</sup> / √d<sub>k</sub> ) · V</div>
+
+    <div class="loom">
+      <div class="matrix-name" style="margin-bottom:14px;">Click a token to make it the Query. Watch it attend to every Key.</div>
+      <div class="loom-tokens" id="loomTokens"></div>
+      <svg id="loomSvg"></svg>
+      <div class="legend">
+        <div class="legend-item"><span class="legend-dot" style="background:var(--cyan);"></span>Query (selected token)</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--amber);"></span>Key (every token, incl. itself)</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--violet);"></span>Value (weighted into output)</div>
+      </div>
+    </div>
+
+    <div style="margin-top:34px;">
+      <div class="matrix-name" style="margin-bottom:10px;">Step through the actual computation</div>
+      <div class="step-badges" id="stepBadges">
+        <div class="step-badge on" data-step="0">1 · raw scores QKᵀ</div>
+        <div class="step-badge" data-step="1">2 · scale by √d_k</div>
+        <div class="step-badge" data-step="2">3 · softmax per row</div>
+        <div class="step-badge" data-step="3">4 · weighted sum of V</div>
+      </div>
+      <div class="panel">
+        <div id="stepStage"></div>
+      </div>
+    </div>
+
+    <div class="note">The <code>√d_k</code> scale matters more than it looks: without it, dot products grow with dimensionality, softmax saturates toward one-hot, and gradients vanish. It's a numerical-stability fix, not a conceptual one.</div>
+  </div>
+</section>
+
+<!-- ================= 05 MULTI-HEAD ================= -->
+<section id="multihead">
+  <div class="wrap reveal">
+    <div class="eyebrow">Stage 05</div>
+    <h2 class="title">Multi-head attention: several relationships at once</h2>
+    <p class="lede">One attention pattern can only capture one kind of relationship well. So d_model is split into h parallel heads, each with its own Q/K/V projections operating on a lower-dimensional slice — one head might track syntax (subject → verb), another coreference (pronoun → noun), another local adjacency.</p>
+
+    <div class="formula">MultiHead(Q,K,V) = Concat(head₁, …, head_h) · W<sup>O</sup><br>where head<sub>i</sub> = Attention(QW<sub>i</sub><sup>Q</sup>, KW<sub>i</sub><sup>K</sup>, VW<sub>i</sub><sup>V</sup>)</div>
+
+    <div class="mini-toggle" style="margin-top:24px;">
+      <button class="on" data-heads="4">4 heads</button>
+      <button data-heads="8">8 heads</button>
+    </div>
+    <div class="headgrid" id="headGrid"></div>
+    <p style="margin-top:18px; font-size:13px;">Each small heatmap above is a genuine, independently-computed attention pattern for the sentence "the cat sat on mat" — same tokens, different learned projection per head, so each head lights up differently. In production models (h = 12 for GPT-2, up to 128 for the largest LLMs) heads are concatenated and passed through one final linear layer, W<sup>O</sup>, to mix information back together.</p>
+  </div>
+</section>
+
+<!-- ================= 06 ADD & NORM ================= -->
+<section id="addnorm">
+  <div class="wrap reveal">
+    <div class="eyebrow">Stage 06</div>
+    <h2 class="title">Residual connections &amp; layer normalization</h2>
+    <div class="two-col-text">
+      <div>
+        <h3 style="font-size:17px; margin-bottom:10px; color:var(--text);">The residual stream</h3>
+        <p style="font-size:13.5px;">Every sub-layer's output is added back to its input: <code style="color:var(--cyan);">x + Sublayer(x)</code>. This "residual stream" is the backbone the whole network reads from and writes to — it's what lets gradients flow cleanly through 96+ stacked layers without vanishing, and lets any layer skip its transformation entirely if it has nothing useful to add.</p>
+      </div>
+      <div>
+        <h3 style="font-size:17px; margin-bottom:10px; color:var(--text);">LayerNorm</h3>
+        <p style="font-size:13.5px;">Before (pre-norm, modern) or after (post-norm, original paper) each sub-layer, activations are normalized to zero mean and unit variance per token, then rescaled by learned gain/bias. This keeps activation magnitudes stable as depth grows — without it, deep stacks are close to untrainable.</p>
+      </div>
+    </div>
+    <div class="panel" style="margin-top:24px;">
+      <div id="residualDiagram"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 07 FFN ================= -->
+<section id="ffn">
+  <div class="wrap reveal">
+    <div class="eyebrow">Stage 07</div>
+    <h2 class="title">The feed-forward network: per-token reasoning</h2>
+    <p class="lede">After attention mixes information <em>across</em> tokens, the feed-forward network processes each token position independently — the same two-layer MLP is applied identically at every position. This is where most of a transformer's parameters actually live.</p>
+    <div class="formula">FFN(x) = W₂ · activation(W₁x + b₁) + b₂ &nbsp;&nbsp;// hidden dim ≈ 4×d_model, activation: GELU / SwiGLU</div>
+    <div class="panel" style="margin-top:22px;">
+      <div id="ffnDiagram"></div>
+    </div>
+    <p style="font-size:13px; margin-top:16px;">The expand-then-contract shape (d_model → 4×d_model → d_model) gives the network room to compute richer intermediate features before compressing back down. Recent models (LLaMA, PaLM) swap GELU for gated variants like SwiGLU, trading one weight matrix for three but improving quality per parameter.</p>
+  </div>
+</section>
+
+<!-- ================= 08 STACK ================= -->
+<section id="stack">
+  <div class="wrap reveal">
+    <div class="eyebrow">Stage 08</div>
+    <h2 class="title">Stacking it: encoder, decoder, or both</h2>
+    <p class="lede">A single attention + FFN block is one layer. Real models stack N of them (6 in the original paper, 96 in GPT-3, 120 in GPT-4-class models), each with its own weights, each refining the residual stream a little further.</p>
+
+    <div class="stackzone">
+      <div>
+        <div class="stack-label">Encoder (BERT-style)</div>
+        <div class="stackcol">
+          <div class="stack-layer ffn">Feed-Forward</div>
+          <div class="stack-layer attn">Self-Attention (bidirectional)</div>
+          <div class="stack-layer ffn">Feed-Forward</div>
+          <div class="stack-layer attn">Self-Attention (bidirectional)</div>
+        </div>
+        <div class="nx" style="text-align:center;">× N layers</div>
+        <p style="font-size:12px; text-align:center; margin-top:8px; color:var(--muted-2);">sees the whole input at once → great for understanding</p>
+      </div>
+      <div>
+        <div class="stack-label">Decoder (GPT-style)</div>
+        <div class="stackcol">
+          <div class="stack-layer ffn">Feed-Forward</div>
+          <div class="stack-layer mask">Masked Self-Attention (causal)</div>
+          <div class="stack-layer ffn">Feed-Forward</div>
+          <div class="stack-layer mask">Masked Self-Attention (causal)</div>
+        </div>
+        <div class="nx" style="text-align:center;">× N layers</div>
+        <p style="font-size:12px; text-align:center; margin-top:8px; color:var(--muted-2);">only sees past tokens → great for generation</p>
+      </div>
+      <div>
+        <div class="stack-label">Encoder–Decoder (T5 / original)</div>
+        <div class="stackcol">
+          <div class="stack-layer ffn">Feed-Forward</div>
+          <div class="stack-layer cross">Cross-Attention → encoder</div>
+          <div class="stack-layer mask">Masked Self-Attention</div>
+        </div>
+        <div class="nx" style="text-align:center;">× N layers</div>
+        <p style="font-size:12px; text-align:center; margin-top:8px; color:var(--muted-2);">reads full input, generates output → great for translation</p>
+      </div>
+    </div>
+    <p style="font-size:13px; margin-top:10px;">Most modern LLMs (GPT-4, Claude, LLaMA, Gemini) are decoder-only: one stack, causal masking, trained to predict the next token. It turned out to be a remarkably general recipe.</p>
+  </div>
+</section>
+
+<!-- ================= 09 MASKING ================= -->
+<section id="masking">
+  <div class="wrap reveal">
+    <div class="eyebrow">Stage 09</div>
+    <h2 class="title">Causal masking &amp; cross-attention</h2>
+    <div class="grid2">
+      <div>
+        <h3 style="font-size:16px; margin-bottom:10px;">Causal mask</h3>
+        <p style="font-size:13.5px; margin-bottom:14px;">A decoder must never let token 3 peek at token 5 — that would be cheating at next-token prediction. Before softmax, illegal positions are set to −∞, so they collapse to exactly 0 after softmax. The result is the lower-triangular pattern below.</p>
+        <div class="matrix-wrap">
+          <div class="mask-grid" id="maskGrid"></div>
+          <div class="matrix-name">rows = query position · columns = key position</div>
+        </div>
+      </div>
+      <div>
+        <h3 style="font-size:16px; margin-bottom:10px;">Cross-attention</h3>
+        <p style="font-size:13.5px; margin-bottom:14px;">In encoder–decoder models, one extra attention layer lets the decoder query the encoder's output: Queries come from the decoder's current state, but Keys and Values come from the encoder. This is literally how a translation model looks back at the source sentence while writing the target one.</p>
+        <div class="panel" id="crossAttnDiagram" style="padding:18px;"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 10 OUTPUT ================= -->
+<section id="output">
+  <div class="wrap reveal">
+    <div class="eyebrow">Stage 10</div>
+    <h2 class="title">From final vector to next word</h2>
+    <p class="lede">After the last layer, each position's vector is projected by a linear layer back up to vocabulary size, then softmax turns those logits into a probability distribution over every possible next token.</p>
+    <div class="panel">
+      <div class="matrix-name" style="margin-bottom:12px;">Predicting the next token after "The cat sat on the ___"</div>
+      <div class="softmax-row" id="outputSoftmax"></div>
+    </div>
+    <div class="grid3" style="margin-top:20px;">
+      <div class="panel">
+        <div class="matrix-name" style="margin-bottom:8px;">Greedy</div>
+        <p style="font-size:12.5px; margin:0;">Always pick the single highest-probability token. Deterministic, but repetitive and dull over long generations.</p>
+      </div>
+      <div class="panel">
+        <div class="matrix-name" style="margin-bottom:8px;">Top-k / Top-p sampling</div>
+        <p style="font-size:12.5px; margin:0;">Sample from only the top k tokens, or the smallest set whose cumulative probability exceeds p. Balances coherence and variety.</p>
+      </div>
+      <div class="panel">
+        <div class="matrix-name" style="margin-bottom:8px;">Temperature</div>
+        <p style="font-size:12.5px; margin:0;">Divides logits before softmax. Low temperature sharpens the distribution (safer); high temperature flattens it (more creative, riskier).</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 11 TRAINING ================= -->
+<section id="training">
+  <div class="wrap reveal">
+    <div class="eyebrow">Stage 11</div>
+    <h2 class="title">Training vs. inference: the pipeline runs differently</h2>
+    <div class="pipeline" id="pipelineDiagram"></div>
+  </div>
+</section>
+
+<!-- ================= 12 RESOURCES ================= -->
+<section id="resources">
+  <div class="wrap reveal">
+    <div class="eyebrow">Stage 12</div>
+    <h2 class="title">Where to go deeper</h2>
+    <p class="lede">This guide is a map, not the territory. These are the resources most engineers converge on when they want the real depth — from intuition to bare-metal implementation.</p>
+    <div class="grid3">
+      <a class="res-card" href="https://arxiv.org/abs/1706.03762" target="_blank" rel="noopener">
+        <div class="kicker">Original paper · 2017</div>
+        <h4>Attention Is All You Need</h4>
+        <p>Vaswani et al. — the paper that introduced the architecture this whole page is tracing.</p>
+      </a>
+      <a class="res-card" href="https://jalammar.github.io/illustrated-transformer/" target="_blank" rel="noopener">
+        <div class="kicker">Visual walkthrough</div>
+        <h4>The Illustrated Transformer</h4>
+        <p>Jay Alammar's diagram-first explainer — the classic first stop for building visual intuition.</p>
+      </a>
+      <a class="res-card" href="https://nlp.seas.harvard.edu/annotated-transformer/" target="_blank" rel="noopener">
+        <div class="kicker">Line-by-line code</div>
+        <h4>The Annotated Transformer</h4>
+        <p>Harvard NLP's paper-to-PyTorch walkthrough — read the math and the implementation side by side.</p>
+      </a>
+      <a class="res-card" href="https://www.youtube.com/watch?v=wjZofJX0v4M" target="_blank" rel="noopener">
+        <div class="kicker">Video series</div>
+        <h4>3Blue1Brown — Neural Networks: attention & transformers</h4>
+        <p>The clearest geometric intuition available for how Q/K/V and attention actually move information.</p>
+      </a>
+      <a class="res-card" href="https://www.youtube.com/watch?v=kCc8FmEb1nY" target="_blank" rel="noopener">
+        <div class="kicker">Build it yourself</div>
+        <h4>Andrej Karpathy — "Let's build GPT"</h4>
+        <p>A from-scratch, character-level GPT built live in PyTorch — the fastest route from theory to working code.</p>
+      </a>
+      <a class="res-card" href="https://huggingface.co/learn/nlp-course/chapter1/1" target="_blank" rel="noopener">
+        <div class="kicker">Applied course</div>
+        <h4>Hugging Face NLP Course</h4>
+        <p>Free, practical, and current — tokenizers, fine-tuning, and the full modern ecosystem around this architecture.</p>
+      </a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p>Built as a self-contained learning artifact · every matrix and animation on this page is computed live in your browser, not pre-rendered.</p>
+</footer>
+
+</main>
+</div>
+
+<script>
+/* =========================================================
+   Small math + color utilities
+   ========================================================= */
+function dot(a,b){let s=0; for(let i=0;i<a.length;i++) s+=a[i]*b[i]; return s;}
+function softmax(arr){
+  const m = Math.max(...arr);
+  const ex = arr.map(v=>Math.exp(v-m));
+  const s = ex.reduce((a,b)=>a+b,0);
+  return ex.map(v=>v/s);
+}
+function heat(v, lo, hi, cLow, cHigh){ // interpolate two hex colors by v in [lo,hi]
+  const t = Math.max(0, Math.min(1, (v-lo)/(hi-lo || 1)));
+  const c1 = hexToRgb(cLow), c2 = hexToRgb(cHigh);
+  const r = Math.round(c1.r + (c2.r-c1.r)*t);
+  const g = Math.round(c1.g + (c2.g-c1.g)*t);
+  const b = Math.round(c1.b + (c2.b-c1.b)*t);
+  return `rgb(${r},${g},${b})`;
+}
+function hexToRgb(hex){
+  hex = hex.replace('#','');
+  return {r:parseInt(hex.substring(0,2),16), g:parseInt(hex.substring(2,4),16), b:parseInt(hex.substring(4,6),16)};
+}
+function seededRand(seed){
+  let s = seed;
+  return function(){ s = (s*9301+49297)%233280; return s/233280; };
+}
+
+/* =========================================================
+   Reveal-on-scroll + active nav tracking
+   ========================================================= */
+const revealEls = document.querySelectorAll('.reveal');
+const io = new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add('in'); } });
+},{threshold:0.12});
+revealEls.forEach(el=>io.observe(el));
+
+const tocLinks = document.querySelectorAll('#toc a');
+const sections = [...document.querySelectorAll('main section[id]')];
+const navIO = new IntersectionObserver((entries)=>{
+  entries.forEach(e=>{
+    const link = document.querySelector(`#toc a[href="#${e.target.id}"]`);
+    if(!link) return;
+    if(e.isIntersecting) { tocLinks.forEach(l=>l.classList.remove('active')); link.classList.add('active'); }
+  });
+},{rootMargin:'-40% 0px -55% 0px'});
+sections.forEach(s=>navIO.observe(s));
+
+/* =========================================================
+   HERO canvas — flowing token -> vector -> attention -> logits
+   ========================================================= */
+(function(){
+  const canvas = document.getElementById('heroCanvas');
+  const ctx = canvas.getContext('2d');
+  let W,H,dpr;
+  function resize(){
+    dpr = window.devicePixelRatio||1;
+    W = canvas.clientWidth; H = canvas.clientHeight = 170;
+    canvas.width = W*dpr; canvas.height = H*dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  const stages = ['tok','emb','attn','logit'];
+  const stageX = i => (W/5)*(i+0.7);
+  const particles = [];
+  const rand = seededRand(7);
+  for(let i=0;i<14;i++){
+    particles.push({
+      y: 30 + rand()*110,
+      stage: Math.floor(rand()*4),
+      prog: rand(),
+      speed: 0.0022 + rand()*0.0018,
+      hue: [ '#4FD8C4','#F2A65A','#A78BFA','#F0678C'][Math.floor(rand()*4)]
+    });
+  }
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    // stage columns
+    const labels = ['tokens','embeddings','attention','logits'];
+    ctx.font = "11px 'JetBrains Mono'";
+    for(let i=0;i<4;i++){
+      const x = stageX(i);
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+      ctx.beginPath(); ctx.moveTo(x,10); ctx.lineTo(x,H-10); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.fillText(labels[i], x-24, H-4);
+    }
+    // particles flowing between stages
+    particles.forEach(p=>{
+      p.prog += p.speed;
+      if(p.prog>1){ p.prog=0; p.stage=(p.stage+1)%4; p.y = 30+rand()*110; }
+      const x0 = stageX(p.stage), x1 = stageX((p.stage+1)%4===0 && p.stage===3 ? 3 : (p.stage+1));
+      const targetX = p.stage===3 ? x0 + 30 : x1;
+      const x = x0 + (targetX-x0)*p.prog;
+      const wob = Math.sin(p.prog*Math.PI*2 + p.y)*4;
+      ctx.beginPath();
+      ctx.arc(x, p.y+wob, 2.6, 0, Math.PI*2);
+      ctx.fillStyle = p.hue;
+      ctx.globalAlpha = 0.85;
+      ctx.fill();
+      ctx.globalAlpha=1;
+    });
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+/* =========================================================
+   01 TOKENIZATION demo
+   ========================================================= */
+const commonWords = new Set(['the','a','an','is','are','was','were','on','in','at','of','to','and','or','process','sequences','well','cat','sat','mat','it']);
+function fakeTokenize(sentence){
+  const words = sentence.trim().split(/\s+/).filter(Boolean);
+  const tokens = [];
+  words.forEach(w=>{
+    const clean = w.replace(/[^\w']/g,'');
+    if(clean.length===0) return;
+    if(commonWords.has(clean.toLowerCase()) || clean.length<=4){
+      tokens.push(clean);
+    } else {
+      // pseudo-BPE split: chunks of 3-5 chars, last chunk gets no marker, continuation chunks marked with ##
+      let i=0; let first=true;
+      while(i<clean.length){
+        const size = Math.min(clean.length-i, 3+((i+clean.length)%3));
+        const piece = clean.slice(i, i+size);
+        tokens.push(first? piece : '##'+piece);
+        first=false; i+=size;
+      }
+    }
+  });
+  return tokens;
+}
+function renderTokens(){
+  const input = document.getElementById('tokenizeInput').value;
+  const tokens = fakeTokenize(input);
+  const out = document.getElementById('tokenOutput');
+  out.innerHTML='';
+  tokens.forEach((t,i)=>{
+    const chip = document.createElement('div');
+    chip.className='token-chip';
+    chip.innerHTML = `${t}<span class="id">#${1000+ (t.split('').reduce((a,c)=>a+c.charCodeAt(0),0)%8000)}</span>`;
+    out.appendChild(chip);
+  });
+}
+document.getElementById('tokenizeInput').addEventListener('input', renderTokens);
+renderTokens();
+
+/* =========================================================
+   02 EMBEDDINGS demo — animated bar vectors for a few tokens
+   ========================================================= */
+(function(){
+  const words = ['The','cat','sat','mat'];
+  const dim = 12;
+  const container = document.getElementById('embedVecs');
+  const rand = seededRand(42);
+  words.forEach((w,wi)=>{
+    const row = document.createElement('div');
+    row.className='vec-row';
+    const label = document.createElement('div');
+    label.className='vec-label'; label.textContent = w;
+    const vec = document.createElement('div');
+    vec.className='vec'; vec.style.flex='1';
+    for(let i=0;i<dim;i++){
+      const bar = document.createElement('div');
+      bar.className='bar';
+      const val = (rand()-0.3);
+      const h = Math.abs(val)*55+4;
+      bar.style.height = h+'px';
+      bar.style.background = val>0 ? 'var(--cyan)' : 'var(--rose)';
+      bar.style.opacity = 0.5+Math.abs(val)*0.6;
+      vec.appendChild(bar);
+    }
+    row.appendChild(label); row.appendChild(vec);
+    container.appendChild(row);
+  });
+})();
+
+/* =========================================================
+   03 POSITIONAL ENCODING — real sine/cosine computation
+   ========================================================= */
+(function(){
+  const dModel = 32, maxPos = 40;
+  function pe(pos, i){
+    const denom = Math.pow(10000, (2*Math.floor(i/2))/dModel);
+    return i%2===0 ? Math.sin(pos/denom) : Math.cos(pos/denom);
+  }
+  // wave plot
+  const c1 = document.getElementById('peCanvas');
+  const ctx1 = c1.getContext('2d');
+  function drawWaves(){
+    const W = c1.clientWidth, H=200;
+    c1.width=W; c1.height=H;
+    ctx1.clearRect(0,0,W,H);
+    const dims = [0,4,10,20];
+    const colors = ['#4FD8C4','#F2A65A','#A78BFA','#F0678C'];
+    dims.forEach((d,di)=>{
+      ctx1.beginPath();
+      for(let p=0;p<maxPos;p++){
+        const x = (p/(maxPos-1))*W;
+        const y = H/2 - pe(p,d)*(H/2-14);
+        p===0? ctx1.moveTo(x,y) : ctx1.lineTo(x,y);
+      }
+      ctx1.strokeStyle = colors[di]; ctx1.lineWidth=2; ctx1.stroke();
+    });
+    ctx1.fillStyle='rgba(255,255,255,0.4)'; ctx1.font="10px 'JetBrains Mono'";
+    ctx1.fillText('position →', W-70, H-4);
+  }
+  drawWaves();
+  window.addEventListener('resize', drawWaves);
+
+  // heatmap
+  const c2 = document.getElementById('peHeatmap');
+  const ctx2 = c2.getContext('2d');
+  function drawHeat(){
+    const W=c2.clientWidth, H=200;
+    c2.width=W; c2.height=H;
+    const rows=24, cols=24;
+    const cw = W/cols, ch=H/rows;
+    for(let r=0;r<rows;r++){
+      for(let cIdx=0;cIdx<cols;cIdx++){
+        const v = pe(r, cIdx);
+        ctx2.fillStyle = heat(v,-1,1,'#0D1524','#4FD8C4');
+        ctx2.fillRect(cIdx*cw, r*ch, cw-1, ch-1);
+      }
+    }
+  }
+  drawHeat();
+  window.addEventListener('resize', drawHeat);
+})();
+
+/* =========================================================
+   04 SELF-ATTENTION playground — real computation
+   ========================================================= */
+const attnState = (function(){
+  const tokens = ['The','cat','sat','on','mat'];
+  const dk = 4;
+  const rand = seededRand(99);
+  // hand-shaped small vectors so patterns look sensible: "sat" relates to "cat", "on" relates to "mat"
+  const Q = [
+    [0.9,0.1,0.2,0.0], // The
+    [0.2,0.9,0.1,0.1], // cat
+    [0.1,0.7,0.6,0.1], // sat
+    [0.1,0.1,0.2,0.8], // on
+    [0.15,0.2,0.1,0.85] // mat
+  ];
+  const K = [
+    [0.85,0.15,0.2,0.05],
+    [0.25,0.85,0.15,0.1],
+    [0.15,0.6,0.65,0.1],
+    [0.1,0.1,0.2,0.8],
+    [0.1,0.15,0.1,0.9]
+  ];
+  const V = [
+    [0.3,0.9,0.1,0.2],
+    [0.8,0.2,0.3,0.1],
+    [0.5,0.6,0.2,0.3],
+    [0.2,0.2,0.8,0.4],
+    [0.4,0.3,0.3,0.9]
+  ];
+  function rawScores(){
+    return Q.map(q => K.map(k => dot(q,k)));
+  }
+  function scaledScores(){
+    return rawScores().map(row=>row.map(v=>v/Math.sqrt(dk)));
+  }
+  function softmaxRows(){
+    return scaledScores().map(row=>softmax(row));
+  }
+  function weightedOutputs(){
+    const sm = softmaxRows();
+    return sm.map(weights => {
+      const out = [0,0,0,0];
+      weights.forEach((w,j)=>{ V[j].forEach((vv,d)=> out[d]+=w*vv); });
+      return out;
+    });
+  }
+  return {tokens,dk,Q,K,V,rawScores,scaledScores,softmaxRows,weightedOutputs};
+})();
+
+let selectedTokenIdx = 2; // "sat" by default
+function renderLoomTokens(){
+  const wrap = document.getElementById('loomTokens');
+  wrap.innerHTML='';
+  attnState.tokens.forEach((t,i)=>{
+    const el = document.createElement('div');
+    el.className = 'loom-token' + (i===selectedTokenIdx?' active':'');
+    el.textContent = t;
+    el.addEventListener('click', ()=>{ selectedTokenIdx=i; renderLoomTokens(); drawLoomSvg(); });
+    wrap.appendChild(el);
+  });
+}
+function drawLoomSvg(){
+  const svg = document.getElementById('loomSvg');
+  const w = svg.clientWidth || 900, h = 120;
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  svg.innerHTML='';
+  const n = attnState.tokens.length;
+  const xs = attnState.tokens.map((_,i)=> (w/n)*(i+0.5));
+  const softmaxRows = attnState.softmaxRows();
+  const weights = softmaxRows[selectedTokenIdx];
+  const qx = xs[selectedTokenIdx];
+  weights.forEach((wgt,j)=>{
+    const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+    const kx = xs[j];
+    const midY = 60;
+    const d = `M ${qx} 8 C ${qx} ${midY}, ${kx} ${midY}, ${kx} 112`;
+    path.setAttribute('d', d);
+    path.setAttribute('fill','none');
+    path.setAttribute('stroke', 'url(#loomGrad)');
+    path.setAttribute('stroke-width', Math.max(1, wgt*14));
+    path.setAttribute('opacity', Math.max(0.15, wgt));
+    svg.appendChild(path);
+
+    const label = document.createElementNS('http://www.w3.org/2000/svg','text');
+    label.setAttribute('x', (qx+kx)/2);
+    label.setAttribute('y', midY-2);
+    label.setAttribute('fill', '#8B96AC');
+    label.setAttribute('font-size','9.5');
+    label.setAttribute('font-family','JetBrains Mono');
+    label.setAttribute('text-anchor','middle');
+    label.textContent = (wgt*100).toFixed(0)+'%';
+    svg.appendChild(label);
+  });
+  const defs = document.createElementNS('http://www.w3.org/2000/svg','defs');
+  defs.innerHTML = `<linearGradient id="loomGrad" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#4FD8C4"/><stop offset="100%" stop-color="#A78BFA"/></linearGradient>`;
+  svg.appendChild(defs);
+}
+renderLoomTokens();
+drawLoomSvg();
+window.addEventListener('resize', drawLoomSvg);
+
+/* step-through matrices */
+let currentStep = 0;
+function matrixToDom(matrix, {lo,hi,cLow,cHigh,dim,rowLabels,colLabels,name}){
+  const wrap = document.createElement('div');
+  wrap.className='matrix-wrap';
+  if(name){ const n=document.createElement('div'); n.className='matrix-name'; n.textContent=name; wrap.appendChild(n); }
+  const grid = document.createElement('div');
+  grid.className='matrix';
+  grid.style.gridTemplateColumns = `repeat(${matrix[0].length}, ${dim?'34px':'42px'})`;
+  matrix.forEach(row=>{
+    row.forEach(v=>{
+      const cell = document.createElement('div');
+      cell.className = 'matrix-cell'+(dim?' dim':'');
+      cell.style.background = heat(v, lo, hi, cLow, cHigh);
+      cell.textContent = v.toFixed(2);
+      grid.appendChild(cell);
+    });
+  });
+  wrap.appendChild(grid);
+  return wrap;
+}
+function renderStepStage(){
+  const stage = document.getElementById('stepStage');
+  stage.innerHTML='';
+  const holder = document.createElement('div');
+  holder.style.display='flex'; holder.style.flexWrap='wrap'; holder.style.gap='24px'; holder.style.alignItems='center';
+
+  if(currentStep===0){
+    const m = attnState.rawScores();
+    holder.appendChild(matrixToDom(m,{lo:-2,hi:2,cLow:'#0D1524',cHigh:'#4FD8C4',name:'Q · Kᵀ  (raw dot-product scores)'}));
+    const p = document.createElement('p'); p.style.fontSize='13px'; p.style.maxWidth='340px';
+    p.textContent = 'Every row is one query token; every column is one key token. Higher value = more raw similarity between that pair.';
+    holder.appendChild(p);
+  } else if(currentStep===1){
+    const m = attnState.scaledScores();
+    holder.appendChild(matrixToDom(m,{lo:-1,hi:1,cLow:'#0D1524',cHigh:'#4FD8C4',name:`scores ÷ √d_k  (d_k = ${attnState.dk})`}));
+    const p = document.createElement('p'); p.style.fontSize='13px'; p.style.maxWidth='340px';
+    p.textContent = 'Same pattern, gentler magnitude — this keeps softmax from saturating into an almost one-hot distribution when dimensions grow large.';
+    holder.appendChild(p);
+  } else if(currentStep===2){
+    const m = attnState.softmaxRows();
+    holder.appendChild(matrixToDom(m,{lo:0,hi:1,cLow:'#0D1524',cHigh:'#F2A65A',name:'softmax(scores) — attention weights'}));
+    const p = document.createElement('p'); p.style.fontSize='13px'; p.style.maxWidth='340px';
+    p.textContent = 'Every row now sums to exactly 1.0 — a genuine probability distribution over which tokens to listen to.';
+    holder.appendChild(p);
+  } else {
+    const m = attnState.weightedOutputs();
+    holder.appendChild(matrixToDom(m,{lo:-0.2,hi:1,cLow:'#0D1524',cHigh:'#A78BFA',name:'weighted sum of V — the output of attention'}));
+    const p = document.createElement('p'); p.style.fontSize='13px'; p.style.maxWidth='340px';
+    p.textContent = "Each output row is a blend of every Value vector, mixed according to that row's attention weights. This is what gets added back into the residual stream.";
+    holder.appendChild(p);
+  }
+  stage.appendChild(holder);
+}
+document.querySelectorAll('.step-badge').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.step-badge').forEach(b=>b.classList.remove('on'));
+    btn.classList.add('on');
+    currentStep = parseInt(btn.dataset.step,10);
+    renderStepStage();
+  });
+});
+renderStepStage();
+
+/* =========================================================
+   05 MULTI-HEAD attention — small multiples
+   ========================================================= */
+function computeHeadPattern(seed){
+  const tokens = attnState.tokens;
+  const rand = seededRand(seed);
+  const n = tokens.length, d=3;
+  const Qh = tokens.map(()=>[rand()-0.5,rand()-0.5,rand()-0.5]);
+  const Kh = tokens.map(()=>[rand()-0.5,rand()-0.5,rand()-0.5]);
+  const scores = Qh.map(q=>Kh.map(k=>dot(q,k)/Math.sqrt(d)));
+  return scores.map(row=>softmax(row));
+}
+function renderHeads(numHeads){
+  const grid = document.getElementById('headGrid');
+  grid.innerHTML='';
+  const n = attnState.tokens.length;
+  for(let h=0; h<numHeads; h++){
+    const card = document.createElement('div');
+    card.className='headcard';
+    const lbl = document.createElement('div'); lbl.className='hlabel'; lbl.textContent = 'head '+(h+1);
+    card.appendChild(lbl);
+    const mini = document.createElement('div');
+    mini.style.display='grid';
+    mini.style.gridTemplateColumns = `repeat(${n},1fr)`;
+    mini.style.gap='2px';
+    const pattern = computeHeadPattern(h*17+3);
+    pattern.forEach(row=>row.forEach(v=>{
+      const cell = document.createElement('div');
+      cell.style.aspectRatio='1';
+      cell.style.borderRadius='2px';
+      cell.style.background = heat(v,0,Math.max(...row,0.4), '#0D1524', ['#4FD8C4','#F2A65A','#A78BFA','#F0678C','#5EEAD4','#F59E9E','#93C5FD','#FDE68A'][h%8]);
+      mini.appendChild(cell);
+    }));
+    card.appendChild(mini);
+    grid.appendChild(card);
+  }
+}
+renderHeads(4);
+document.querySelectorAll('[data-heads]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('[data-heads]').forEach(b=>b.classList.remove('on'));
+    btn.classList.add('on');
+    renderHeads(parseInt(btn.dataset.heads,10));
+  });
+});
+
+/* =========================================================
+   06 RESIDUAL diagram (SVG)
+   ========================================================= */
+(function(){
+  const el = document.getElementById('residualDiagram');
+  el.innerHTML = `
+  <svg viewBox="0 0 700 140" width="100%" height="140">
+    <defs>
+      <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+        <path d="M0,0 L6,3 L0,6 z" fill="#5C6883"/>
+      </marker>
+    </defs>
+    <line x1="30" y1="110" x2="670" y2="110" stroke="#28334A" stroke-width="2"/>
+    <text x="10" y="115" font-family="JetBrains Mono" font-size="10" fill="#5C6883">x</text>
+
+    <rect x="120" y="30" width="140" height="40" rx="8" fill="#111A2C" stroke="#4FD8C4"/>
+    <text x="190" y="54" font-family="JetBrains Mono" font-size="11" fill="#4FD8C4" text-anchor="middle">Self-Attention</text>
+    <path d="M 190 110 L 190 70" stroke="#5C6883" stroke-width="1.6" marker-end="url(#arrow)" fill="none"/>
+    <path d="M 190 30 C 190 -6, 340 -6, 340 30" stroke="#4FD8C4" stroke-width="1.6" fill="none" stroke-dasharray="4 3"/>
+    <circle cx="340" cy="40" r="12" fill="#111A2C" stroke="#5C6883"/>
+    <text x="340" y="44" font-family="JetBrains Mono" font-size="13" fill="#E8ECF6" text-anchor="middle">+</text>
+
+    <path d="M 340 52 L 340 105" stroke="#5C6883" stroke-width="1.6" marker-end="url(#arrow)" fill="none"/>
+
+    <rect x="420" y="30" width="140" height="40" rx="8" fill="#111A2C" stroke="#A78BFA"/>
+    <text x="490" y="54" font-family="JetBrains Mono" font-size="11" fill="#A78BFA" text-anchor="middle">LayerNorm</text>
+    <path d="M 340 30 C 340 4, 420 4, 420 30" stroke="#5C6883" stroke-width="1.6" fill="none" marker-end="url(#arrow)"/>
+
+    <path d="M 490 70 L 490 105" stroke="#5C6883" stroke-width="1.6" fill="none"/>
+    <path d="M 340 110 L 640 110" stroke="#28334A" stroke-width="2"/>
+    <circle cx="600" cy="110" r="3" fill="#5C6883"/>
+    <text x="600" y="130" font-family="JetBrains Mono" font-size="10" fill="#5C6883" text-anchor="middle">→ next sub-layer</text>
+  </svg>
+  <p style="font-size:12.5px; margin-top:6px; color:var(--muted-2);">The residual stream (bottom rail) runs straight through; each sub-layer branches off, does its work, and adds its result back in. Nothing forces a layer to be used — the network can learn to ignore one if it's not helpful.</p>
+  `;
+})();
+
+/* =========================================================
+   07 FFN diagram
+   ========================================================= */
+(function(){
+  const el = document.getElementById('ffnDiagram');
+  const dims = [8, 28, 8];
+  const labels = ['d_model', '4 × d_model (hidden)', 'd_model'];
+  let html = '<div style="display:flex; align-items:center; justify-content:center; gap:40px; flex-wrap:wrap;">';
+  dims.forEach((d,i)=>{
+    html += `<div style="text-align:center;">
+      <div style="display:flex; flex-direction:column-reverse; gap:3px; height:180px; justify-content:center; align-items:center;">`;
+    for(let n=0;n<d;n++){
+      const active = i===1;
+      html += `<div style="width:${active?10:16}px; height:${active?10:16}px; border-radius:3px; background:${i===1?'#A78BFA':'#4FD8C4'}; opacity:${0.4+ (n%5)*0.12};"></div>`;
+    }
+    html += `</div><div class="matrix-name" style="margin-top:10px;">${labels[i]}</div></div>`;
+    if(i<dims.length-1){
+      html += `<div style="color:#5C6883; font-size:20px;">→</div>`;
+    }
+  });
+  html += '</div>';
+  el.innerHTML = html;
+})();
+
+/* =========================================================
+   09 MASK grid + cross attention diagram
+   ========================================================= */
+(function(){
+  const grid = document.getElementById('maskGrid');
+  const n=6;
+  grid.style.gridTemplateColumns = `repeat(${n}, 26px)`;
+  for(let r=0;r<n;r++){
+    for(let c=0;c<n;c++){
+      const cell = document.createElement('div');
+      cell.style.width='26px'; cell.style.height='26px'; cell.style.borderRadius='4px';
+      cell.style.display='flex'; cell.style.alignItems='center'; cell.style.justifyContent='center';
+      cell.style.fontSize='9px'; cell.style.fontFamily="'JetBrains Mono'";
+      const visible = c<=r;
+      cell.style.background = visible ? 'rgba(79,216,196,0.35)' : 'rgba(255,255,255,0.03)';
+      cell.style.color = visible ? '#CFF7EF' : '#3A4560';
+      cell.textContent = visible ? '1' : '0';
+      grid.appendChild(cell);
+    }
+  }
+})();
+(function(){
+  const el = document.getElementById('crossAttnDiagram');
+  el.innerHTML = `
+  <svg viewBox="0 0 340 160" width="100%" height="160">
+    <rect x="10" y="10" width="130" height="34" rx="7" fill="#0D1524" stroke="#28334A"/>
+    <text x="75" y="31" font-size="11" font-family="JetBrains Mono" fill="#8B96AC" text-anchor="middle">Encoder output (K, V)</text>
+
+    <rect x="200" y="110" width="130" height="34" rx="7" fill="#0D1524" stroke="#28334A"/>
+    <text x="265" y="131" font-size="11" font-family="JetBrains Mono" fill="#8B96AC" text-anchor="middle">Decoder state (Q)</text>
+
+    <path d="M 140 27 C 200 27, 200 100, 240 118" stroke="#F0678C" stroke-width="1.8" fill="none" marker-end="url(#arrow)"/>
+    <rect x="120" y="60" width="100" height="30" rx="6" fill="rgba(240,103,140,0.12)" stroke="#F0678C"/>
+    <text x="170" y="80" font-size="10.5" font-family="JetBrains Mono" fill="#F0678C" text-anchor="middle">Cross-Attention</text>
+  </svg>
+  <p style="font-size:12px; color:var(--muted-2); margin:0;">Queries walk forward from the decoder; Keys and Values reach back from the encoder — this is the bridge between "reading" and "writing" in translation-style models.</p>
+  `;
+})();
+
+/* =========================================================
+   10 OUTPUT softmax over a tiny vocabulary
+   ========================================================= */
+(function(){
+  const vocab = [['mat',0.42],['floor',0.19],['rug',0.14],['couch',0.09],['table',0.07],['roof',0.05],['bed',0.04]];
+  const row = document.getElementById('outputSoftmax');
+  vocab.forEach(([word,p])=>{
+    const w = document.createElement('div');
+    w.className='softmax-bar-wrap';
+    const bar = document.createElement('div');
+    bar.className='softmax-bar'; bar.style.height='0px';
+    const val = document.createElement('div'); val.className='softmax-val'; val.textContent=(p*100).toFixed(0)+'%';
+    const lbl = document.createElement('div'); lbl.className='softmax-lbl'; lbl.textContent=word;
+    w.appendChild(val); w.appendChild(bar); w.appendChild(lbl);
+    row.appendChild(w);
+    requestAnimationFrame(()=> setTimeout(()=>{ bar.style.height = (p*80)+'px'; }, 80));
+  });
+})();
+
+/* =========================================================
+   11 PIPELINE diagram (training vs inference)
+   ========================================================= */
+(function(){
+  const stages = [
+    {t:'Forward pass', d:'Input sequence runs through embedding → N layers → logits, identically in both modes.'},
+    {t:'Training: compute loss', d:'Cross-entropy between predicted next-token distribution and the true next token, averaged across every position in parallel (teacher forcing).'},
+    {t:'Training: backpropagate', d:'Gradients flow back through every matrix — attention projections, FFN weights, embeddings — and an optimizer (Adam/AdamW) updates them.'},
+    {t:'Inference: sample one token', d:"Only the very last position's logits matter. Pick (or sample) the next token, then append it to the sequence."},
+    {t:'Inference: repeat autoregressively', d:'Feed the extended sequence back in and predict the next token again — this is why generation is sequential and slower than training.'},
+  ];
+  const el = document.getElementById('pipelineDiagram');
+  stages.forEach((s,i)=>{
+    const row = document.createElement('div');
+    row.className='pipe-stage';
+    row.innerHTML = `<div class="pipe-num">${String(i+1).padStart(2,'0')}</div>
+      <div class="pipe-body"><strong>${s.t}</strong><span>${s.d}</span></div>`;
+    el.appendChild(row);
+  });
+})();
+</script>
+</body>
+</html>
